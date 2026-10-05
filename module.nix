@@ -148,8 +148,13 @@ let
   );
   numbered = imap0 (n: i: i // { cred = "secret-${toString n}"; }) injections;
 
-  manifest = pkgs.writeText "openhop-repeater-secrets.json" (builtins.toJSON
-    (map (i: { inherit (i) entry path cred; }) numbered));
+  manifest = pkgs.writeText "openhop-repeater-secrets.json" (builtins.toJSON {
+    secrets = map (i: { inherit (i) entry path cred; }) numbered;
+    identity = if cfg.repeater.identityKeyFile == null then null else {
+      cred = "identity-key";
+      dest = cfg.repeater.identityFile;
+    };
+  });
 
   # Merges secrets (never placed in the Nix store) into the config and writes it
   # to the state directory, where the daemon expects a writable config file.
@@ -168,7 +173,8 @@ let
     with open(src) as f:
         cfg = yaml.safe_load(f)
     with open(manifest) as f:
-        injections = json.load(f)
+        manifest_data = json.load(f)
+    injections = manifest_data["secrets"]
 
     creds = os.environ["CREDENTIALS_DIRECTORY"]
     for inj in injections:
@@ -185,6 +191,16 @@ let
             target = target.setdefault(key, {})
         target[leaf] = value
 
+    ident = manifest_data["identity"]
+    if ident is not None:
+        with open(os.path.join(creds, ident["cred"]), "rb") as f:
+            data = f.read()
+        tmp = ident["dest"] + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, ident["dest"])
+
     tmp = dst + ".tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
@@ -192,7 +208,8 @@ let
     os.replace(tmp, dst)
   '';
 
-  credentials = map (i: "${i.cred}:${i.file}") numbered;
+  credentials = map (i: "${i.cred}:${i.file}") numbered
+    ++ optional (cfg.repeater.identityKeyFile != null) "identity-key:${cfg.repeater.identityKeyFile}";
 in
 {
   options.services.openhop-repeater = {
@@ -256,6 +273,18 @@ in
         type = types.str;
         default = "";
         description = "Owner info shown to clients that request it.";
+      };
+
+      identityKeyFile = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        example = "/var/lib/openhop-secrets/identity.key";
+        description = ''
+          File holding the repeater's identity key, in the format the daemon writes
+          (an existing `identity.key`). It is copied to `identityFile` at every start, so
+          the node keeps its identity and never generates a new one. If null, the daemon
+          creates `identityFile` on first start. Kept out of the Nix store.
+        '';
       };
 
       identityFile = mkOption {

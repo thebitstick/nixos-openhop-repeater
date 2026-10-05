@@ -54,4 +54,5 @@ See `examples/example-chicago-repeater.nix` for a full example:
   plus MQTT reporting to LetsMesh and ChiMesh with IATA `ORD`. Turn MQTT off with `chicagolandMesh.mqtt = false`.
 - `companions.<name>` defines virtual companions: `nodeName`, `identityKeyFile`, `bindAddress`, `port`.
 - `roomServers.<name>` defines room servers: `nodeName`, `identityKeyFile`, location, advert intervals, password files.
-- Identity keys are hex files (`openssl rand -hex 32`), kept out of the Nix store, and must be unique per identity.
+- `repeater.identityKeyFile` installs an existing `identity.key` at every start, so the node never generates a new identity.
+- Companion and room identity keys are hex files (`openssl rand -hex 32`), kept out of the Nix store, and must be unique per identity.
