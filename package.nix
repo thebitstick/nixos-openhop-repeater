@@ -1,4 +1,8 @@
-{ lib, python3Packages, fetchFromGitHub }:
+{
+  lib,
+  python3Packages,
+  fetchFromGitHub,
+}:
 
 let
   openhop-core = python3Packages.buildPythonPackage rec {
@@ -58,17 +62,19 @@ python3Packages.buildPythonApplication rec {
     wheel
   ];
 
-  dependencies = (with python3Packages; [
-    pyyaml
-    cherrypy
-    cherrypy-cors
-    paho-mqtt
-    psutil
-    pyserial
-    pyjwt
-    ws4py
-    rrdtool
-  ]) ++ [ openhop-core ];
+  dependencies =
+    (with python3Packages; [
+      pyyaml
+      cherrypy
+      cherrypy-cors
+      paho-mqtt
+      psutil
+      pyserial
+      pyjwt
+      ws4py
+      rrdtool
+    ])
+    ++ [ openhop-core ];
 
   # Upstream pins exact versions of its own deps; nixpkgs versions differ slightly.
   pythonRelaxDeps = true;

@@ -31,7 +31,7 @@
     # Virtual companion: connect a MeshCore client to <bindAddress>:<port>.
     companions."ORD-EXAMPLE-COMP" = {
       identityKeyFile = "/run/secrets/openhop-companion-key";
-      bindAddress = "0.0.0.0";   # reachable on your LAN; the default is 127.0.0.1
+      bindAddress = "0.0.0.0"; # reachable on your LAN; the default is 127.0.0.1
       port = 5000;
       openFirewall = true;
     };

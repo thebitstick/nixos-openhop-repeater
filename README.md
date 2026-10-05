@@ -1,58 +1,174 @@
 # nixos-openhop-repeater
 
-NixOS package + module for [openHop Repeater](https://github.com/openhop-dev/openhop_repeater).
+A NixOS module and package for [openHop Repeater](https://github.com/openhop-dev/openhop_repeater),
+the Python [MeshCore](https://meshcore.co.uk) repeater daemon. Configure the daemon from Nix instead of
+editing `config.yaml` by hand:
 
 ```nix
-# flake.nix
-inputs.openhop-repeater = {
-  url = "github:thebitstick/nixos-openhop-repeater";
-  inputs.nixpkgs.follows = "nixpkgs";
+services.openhop-repeater = {
+  enable = true;
+  repeater.name = "My Repeater";
+  repeater.latitude = 41.8781;
+  repeater.longitude = -87.6298;
 };
-# ...
-modules = [ openhop-repeater.nixosModules.default ./configuration.nix ];
 ```
 
+> Unofficial. This project is not affiliated with or endorsed by openHop. It packages
+> openhop_repeater **1.1.4** (with openhop_core **1.1.3**) and is tested against nixos-unstable,
+> 26.05 and 25.11.
+
+## Quick start
+
+Add the flake input and the module to your system:
+
 ```nix
-# configuration.nix
 {
-  services.openhop-repeater = {
-    enable = true;
-    openFirewall = true;
-
-    repeater = {
-      name = "Repeater Name";
-      latitude = "41.44663";      # string or float
-      longitude = -81.69541;
-      security.adminPasswordFile = "/run/secrets/openhop-admin";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    openhop-repeater = {
+      url = "github:thebitstick/nixos-openhop-repeater";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
+  };
 
-    radio = {
-      type = "sx1262";            # or sx1262_ch341 | kiss | modem_tcp | modem_usb
-      frequency = 910525000;      # Hz; no default, pick your region's
-      sx1262 = { cs_pin = 21; reset_pin = 18; busy_pin = 20; irq_pin = 16; };
+  outputs = { nixpkgs, openhop-repeater, ... }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux"; # or aarch64-linux
+      modules = [
+        openhop-repeater.nixosModules.default
+        ./configuration.nix
+      ];
     };
-
-    # Anything else upstream's config.yaml supports:
-    settings.mqtt_brokers = { iata_code = "CLE"; brokers = [ { preset = "letsmesh"; } ]; };
   };
 }
 ```
 
-Notes
-- `config.yaml` is regenerated from Nix on every service start into `/var/lib/openhop_repeater/`.
-  Changes made in the web UI last until the next restart; put them in Nix to keep them.
-- Secrets go through `*File` options (systemd `LoadCredential`), never the Nix store.
-- The identity key lives in `/var/lib/openhop_repeater/identity.key`. Back it up.
-- On a Raspberry Pi, enable SPI separately (e.g. `hardware.raspberry-pi."4".apply-overlays-dtmerge` / `dtparam=spi=on`).
+Without flakes, `imports = [ /path/to/nixos-openhop-repeater/module.nix ];` works too.
 
-## ChicagolandMesh profile, companions, room servers
+Then in `configuration.nix` (see [`examples/`](examples) for a fuller one):
 
-See `examples/example-chicago-repeater.nix` for a full example:
+```nix
+services.openhop-repeater = {
+  enable = true;
+  openFirewall = true;          # web dashboard, port 8000 by default
 
-- `chicagolandMesh.enable = true` applies the [ChicagolandMesh](https://chicagolandmesh.org/guides/meshcore/getting-started/configure/)
-  recommended setup (910.525 MHz / 62.5 kHz / SF7 / CR5 / 22 dBm, 3-byte path hashes, 4 h advert interval, minimal loop detection (per ChiMesh's openHop guide))
-  plus MQTT reporting to LetsMesh and ChiMesh with IATA `ORD`. Turn MQTT off with `chicagolandMesh.mqtt = false`.
-- `companions.<name>` defines virtual companions: `nodeName`, `identityKeyFile`, `bindAddress`, `port`.
-- `roomServers.<name>` defines room servers: `nodeName`, `identityKeyFile`, location, advert intervals, password files.
-- `repeater.identityKeyFile` installs an existing `identity.key` at every start, so the node never generates a new identity.
-- Companion and room identity keys are hex files (`openssl rand -hex 32`), kept out of the Nix store, and must be unique per identity.
+  repeater = {
+    name = "My Repeater";
+    latitude = 41.8781;         # strings such as "41.8781" are accepted too
+    longitude = -87.6298;
+    security.adminPasswordFile = "/var/lib/openhop-secrets/admin";
+  };
+
+  radio = {
+    type = "modem_usb";         # sx1262 | sx1262_ch341 | kiss | modem_tcp | modem_usb
+    frequency = 910525000;      # Hz, required, no default
+    modemUsb.port = "/dev/serial/by-id/usb-...";
+  };
+};
+```
+
+Apply with `nixos-rebuild switch`, then open `http://<host>:8000` and follow the logs with
+`journalctl -u openhop-repeater -f`.
+
+## Secrets
+
+Passwords and identity keys are **never** put in the Nix store. Options ending in `File` take a path to a
+file on the target machine, which systemd loads at start (`LoadCredential`), so root-owned `0600` files in a
+`0700` directory are fine:
+
+| Option | File contents | If you leave it unset |
+| --- | --- | --- |
+| `repeater.security.adminPasswordFile` | admin password | dashboard login does not work (build warning) |
+| `repeater.security.guestPasswordFile` | guest password | no guest access |
+| `repeater.security.jwtSecretFile` | e.g. `openssl rand -hex 32` | a new secret every restart, which logs everyone out |
+| `repeater.identityKeyFile` | an existing `identity.key` | one is generated on first start |
+| `companions.<name>.identityKeyFile` | 64 hex chars (`openssl rand -hex 32`) or 128 (firmware key) | required |
+| `roomServers.<name>.identityKeyFile` | same as companions | required |
+
+- The files must exist **before** the service starts, or the unit fails with a credentials error.
+- Every identity needs its own unique key.
+- Your repeater's identity is its address on the mesh. Back up `/var/lib/openhop_repeater/identity.key`
+  (or the file you pass as `identityKeyFile`). If you replace it, the mesh sees a new node.
+- To keep secrets encrypted in your repository, [sops-nix](https://github.com/Mic92/sops-nix) or
+  [agenix](https://github.com/ryantm/agenix) paths work here, for example
+  `config.sops.secrets.openhop-admin.path`.
+
+## How the configuration is applied
+
+`config.yaml` is regenerated from your Nix options, plus the secrets, **every time the service starts**, and
+written to `/var/lib/openhop_repeater/config.yaml`. Consequences:
+
+- Nix is the source of truth. Changes made in the web dashboard last until the next restart. Put anything you
+  want to keep in your configuration.
+- Anything upstream supports but this module has no option for goes in `settings`, which is merged over
+  everything else. Do not put secrets there.
+- `nix eval .#nixosConfigurations.<host>.config.services.openhop-repeater.renderedSettings --json` shows the
+  final config without secrets.
+
+## Radio backends
+
+| `radio.type` | Hardware | Notes |
+| --- | --- | --- |
+| `modem_usb` | openHop Modem (e.g. Heltec V3) over USB | set `modemUsb.port`; use `/dev/serial/by-id/...` for a stable path |
+| `modem_tcp` | openHop Modem over Wi-Fi/Ethernet | set `modemTcp.host` |
+| `kiss` | KISS serial modem | set `kiss.port` |
+| `sx1262` | SX1262 HAT on SPI/GPIO (Raspberry Pi) | pin numbers in `radio.sx1262`; enable SPI in your system |
+| `sx1262_ch341` | SX1262 behind a CH341 USB-to-SPI adapter | optional `radio.ch341` for several adapters |
+| `null` | none | the daemon runs without RF, useful for testing |
+
+The service user is added to `dialout`, `plugdev`, `gpio` and `spi`, and udev rules grant those groups access
+to SPI, GPIO and CH341 devices. The daemon runs as an unprivileged user, never as root. Its only extra
+capability is `CAP_SYS_TIME`, and only if you enable `gps.enable`.
+
+## Regional profile: Chicagoland Mesh
+
+`chicagolandMesh.enable = true` applies the settings from ChicagolandMesh's openHop guide: 910.525 MHz,
+62.5 kHz, SF7, CR5, 22 dBm, 3-byte path hashes, minimal loop detection, a 4 h advert interval, and MQTT
+reporting to LetsMesh and ChiMesh with IATA code `ORD`. Every value is a default you can override. MQTT
+publishes what your repeater hears to public brokers, so use `chicagolandMesh.mqtt = false` to opt out.
+Other regions: set `radio.*`, `mesh.*` and `mqtt.*` yourself.
+
+## Companions and room servers
+
+```nix
+services.openhop-repeater = {
+  companions."My Companion" = {
+    identityKeyFile = "/var/lib/openhop-secrets/companion-key";
+    bindAddress = "0.0.0.0";   # defaults to 127.0.0.1: the port has no authentication
+    port = 5000;
+    openFirewall = true;
+  };
+  roomServers."Test Room" = {
+    identityKeyFile = "/var/lib/openhop-secrets/room-key";
+    adminPasswordFile = "/var/lib/openhop-secrets/room-admin";
+  };
+};
+```
+
+## All options
+
+`nix build github:thebitstick/nixos-openhop-repeater#options-doc` produces a Markdown reference of every
+option with its type, default and description.
+
+## Updating to a new openHop release
+
+1. In `package.nix`, bump `version` for `openhop-repeater`, and the `openhop-core` version if upstream's
+   `pyproject.toml` pins a new one.
+2. Get the new hash: `nix store prefetch-file --unpack https://github.com/openhop-dev/openhop_repeater/archive/refs/tags/<version>.tar.gz`
+3. `nix flake check`. A new upstream release can rename config keys, so read the release notes.
+
+## Development
+
+```
+nix flake check        # package build, rendered config, start-up script and assertion tests
+nix fmt                # nixfmt
+```
+
+The checks need a Linux builder but not KVM. They cover the generated config, the secret handling at
+start-up, and the configuration mistakes the module rejects. They do not start the real daemon or talk to
+hardware.
+
+## License
+
+See [LICENSE](LICENSE) for this repository's Nix code. openHop Repeater and openhop_core are MIT licensed
+by their authors.

@@ -1,10 +1,30 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   inherit (lib)
-    mkEnableOption mkOption mkIf mkMerge types literalExpression optional optionals
-    optionalAttrs recursiveUpdate filterAttrsRecursive mapAttrsToList mapAttrs'
-    filterAttrs imap0 concatLists mkDefault;
+    mkEnableOption
+    mkOption
+    mkIf
+    mkMerge
+    types
+    literalExpression
+    optional
+    optionals
+    optionalAttrs
+    recursiveUpdate
+    filterAttrsRecursive
+    mapAttrsToList
+    filterAttrs
+    imap0
+    concatLists
+    mkDefault
+    attrNames
+    ;
 
   cfg = config.services.openhop-repeater;
   yaml = pkgs.formats.yaml { };
@@ -24,31 +44,33 @@ let
   };
 
   # Secrets are left out of these entries; see `injections` below.
-  companionEntries = mapAttrsToList
-    (name: c: {
-      inherit name;
-      settings = dropNulls ({
+  companionEntries = mapAttrsToList (name: c: {
+    inherit name;
+    settings = dropNulls (
+      {
         node_name = c.nodeName;
         bind_address = c.bindAddress;
         tcp_port = c.port;
         tcp_timeout = c.tcpTimeout;
-      } // c.settings);
-    })
-    cfg.companions;
+      }
+      // c.settings
+    );
+  }) cfg.companions;
 
-  roomServerEntries = mapAttrsToList
-    (name: r: {
-      inherit name;
-      type = "room_server";
-      settings = dropNulls ({
+  roomServerEntries = mapAttrsToList (name: r: {
+    inherit name;
+    type = "room_server";
+    settings = dropNulls (
+      {
         node_name = r.nodeName;
         latitude = r.latitude;
         longitude = r.longitude;
         flood_advert_interval_hours = r.floodAdvertIntervalHours;
         direct_advert_interval_hours = r.directAdvertIntervalHours;
-      } // r.settings);
-    })
-    cfg.roomServers;
+      }
+      // r.settings
+    );
+  }) cfg.roomServers;
 
   radioTypeUsesSpi = cfg.radio.type == "sx1262";
   radioTypeUsesCh341 = cfg.radio.type == "sx1262_ch341";
@@ -84,7 +106,10 @@ let
     };
 
     storage.storage_dir = stateDir;
-    http = { inherit (cfg.http) host port; enabled = cfg.http.enable; };
+    http = {
+      inherit (cfg.http) host port;
+      enabled = cfg.http.enable;
+    };
     logging.level = cfg.logLevel;
 
     gps = {
@@ -97,7 +122,10 @@ let
   }
   // optionalAttrs (meshSettings != { }) { mesh = meshSettings; }
   // optionalAttrs (cfg.mqtt.iataCode != null) {
-    mqtt_brokers = { iata_code = cfg.mqtt.iataCode; brokers = cfg.mqtt.brokers; };
+    mqtt_brokers = {
+      iata_code = cfg.mqtt.iataCode;
+      brokers = cfg.mqtt.brokers;
+    };
   }
   // optionalAttrs (cfg.companions != { } || cfg.roomServers != { }) {
     identities = {
@@ -107,15 +135,29 @@ let
   }
   // optionalAttrs radioTypeUsesSpi {
     sx1262 = {
-      bus_id = 0; cs_id = 0; cs_pin = 21; reset_pin = 18; busy_pin = 20; irq_pin = 16;
-      txen_pin = -1; rxen_pin = -1;
-    } // cfg.radio.sx1262;
+      bus_id = 0;
+      cs_id = 0;
+      cs_pin = 21;
+      reset_pin = 18;
+      busy_pin = 20;
+      irq_pin = 16;
+      txen_pin = -1;
+      rxen_pin = -1;
+    }
+    // cfg.radio.sx1262;
   }
   // optionalAttrs radioTypeUsesCh341 {
     sx1262 = {
-      bus_id = 0; cs_id = 0; cs_pin = 0; reset_pin = 1; busy_pin = 2; irq_pin = 3;
-      txen_pin = -1; rxen_pin = -1;
-    } // cfg.radio.sx1262;
+      bus_id = 0;
+      cs_id = 0;
+      cs_pin = 0;
+      reset_pin = 1;
+      busy_pin = 2;
+      irq_pin = 3;
+      txen_pin = -1;
+      rxen_pin = -1;
+    }
+    // cfg.radio.sx1262;
     ch341 = cfg.radio.ch341;
   }
   // optionalAttrs (cfg.radio.type == "kiss") { kiss = cfg.radio.kiss; }
@@ -130,85 +172,140 @@ let
   # repeater's own security block, otherwise the identity it belongs to.
   injections = lib.filter (i: i.file != null) (
     [
-      { entry = null; path = [ "admin_password" ]; file = cfg.repeater.security.adminPasswordFile; }
-      { entry = null; path = [ "guest_password" ]; file = cfg.repeater.security.guestPasswordFile; }
-      { entry = null; path = [ "jwt_secret" ]; file = cfg.repeater.security.jwtSecretFile; }
+      {
+        entry = null;
+        path = [ "admin_password" ];
+        file = cfg.repeater.security.adminPasswordFile;
+      }
+      {
+        entry = null;
+        path = [ "guest_password" ];
+        file = cfg.repeater.security.guestPasswordFile;
+      }
+      {
+        entry = null;
+        path = [ "jwt_secret" ];
+        file = cfg.repeater.security.jwtSecretFile;
+      }
     ]
-    ++ mapAttrsToList
-      (name: c: { entry = { section = "companions"; inherit name; }; path = [ "identity_key" ]; file = c.identityKeyFile; })
-      cfg.companions
-    ++ concatLists (mapAttrsToList
-      (name: r:
-        let entry = { section = "room_servers"; inherit name; }; in [
-          { inherit entry; path = [ "identity_key" ]; file = r.identityKeyFile; }
-          { inherit entry; path = [ "settings" "admin_password" ]; file = r.adminPasswordFile; }
-          { inherit entry; path = [ "settings" "guest_password" ]; file = r.guestPasswordFile; }
-        ])
-      cfg.roomServers)
+    ++ mapAttrsToList (name: c: {
+      entry = {
+        section = "companions";
+        inherit name;
+      };
+      path = [ "identity_key" ];
+      file = c.identityKeyFile;
+    }) cfg.companions
+    ++ concatLists (
+      mapAttrsToList (
+        name: r:
+        let
+          entry = {
+            section = "room_servers";
+            inherit name;
+          };
+        in
+        [
+          {
+            inherit entry;
+            path = [ "identity_key" ];
+            file = r.identityKeyFile;
+          }
+          {
+            inherit entry;
+            path = [
+              "settings"
+              "admin_password"
+            ];
+            file = r.adminPasswordFile;
+          }
+          {
+            inherit entry;
+            path = [
+              "settings"
+              "guest_password"
+            ];
+            file = r.guestPasswordFile;
+          }
+        ]
+      ) cfg.roomServers
+    )
   );
   numbered = imap0 (n: i: i // { cred = "secret-${toString n}"; }) injections;
 
-  manifest = pkgs.writeText "openhop-repeater-secrets.json" (builtins.toJSON {
-    secrets = map (i: { inherit (i) entry path cred; }) numbered;
-    identity = if cfg.repeater.identityKeyFile == null then null else {
-      cred = "identity-key";
-      dest = cfg.repeater.identityFile;
-    };
-  });
+  manifest = pkgs.writeText "openhop-repeater-secrets.json" (
+    builtins.toJSON {
+      secrets = map (i: { inherit (i) entry path cred; }) numbered;
+      identity =
+        if cfg.repeater.identityKeyFile == null then
+          null
+        else
+          {
+            cred = "identity-key";
+            dest = cfg.repeater.identityFile;
+          };
+    }
+  );
 
   # Merges secrets (never placed in the Nix store) into the config and writes it
   # to the state directory, where the daemon expects a writable config file.
-  prepareConfig = pkgs.writers.writePython3 "openhop-repeater-prepare-config"
-    {
-      libraries = [ pkgs.python3Packages.pyyaml ];
-      flakeIgnore = [ "E" "W" ];
-    } ''
-    import json
-    import os
-    import sys
+  prepareConfig =
+    pkgs.writers.writePython3 "openhop-repeater-prepare-config"
+      {
+        libraries = [ pkgs.python3Packages.pyyaml ];
+        flakeIgnore = [
+          "E"
+          "W"
+        ];
+      }
+      ''
+        import json
+        import os
+        import sys
 
-    import yaml
+        import yaml
 
-    src, manifest, dst = sys.argv[1], sys.argv[2], sys.argv[3]
-    with open(src) as f:
-        cfg = yaml.safe_load(f)
-    with open(manifest) as f:
-        manifest_data = json.load(f)
-    injections = manifest_data["secrets"]
+        src, manifest, dst = sys.argv[1], sys.argv[2], sys.argv[3]
+        with open(src) as f:
+            cfg = yaml.safe_load(f)
+        with open(manifest) as f:
+            manifest_data = json.load(f)
+        injections = manifest_data["secrets"]
 
-    creds = os.environ["CREDENTIALS_DIRECTORY"]
-    for inj in injections:
-        with open(os.path.join(creds, inj["cred"])) as f:
-            value = f.read().strip()
-        entry = inj["entry"]
-        if entry is None:
-            target = cfg.setdefault("repeater", {}).setdefault("security", {})
-        else:
-            items = cfg["identities"][entry["section"]]
-            target = next(e for e in items if e["name"] == entry["name"])
-        *parents, leaf = inj["path"]
-        for key in parents:
-            target = target.setdefault(key, {})
-        target[leaf] = value
+        creds = os.environ["CREDENTIALS_DIRECTORY"]
+        for inj in injections:
+            with open(os.path.join(creds, inj["cred"])) as f:
+                value = f.read().strip()
+            entry = inj["entry"]
+            if entry is None:
+                target = cfg.setdefault("repeater", {}).setdefault("security", {})
+            else:
+                items = cfg["identities"][entry["section"]]
+                target = next(e for e in items if e["name"] == entry["name"])
+            *parents, leaf = inj["path"]
+            for key in parents:
+                target = target.setdefault(key, {})
+            target[leaf] = value
 
-    ident = manifest_data["identity"]
-    if ident is not None:
-        with open(os.path.join(creds, ident["cred"]), "rb") as f:
-            data = f.read()
-        tmp = ident["dest"] + ".tmp"
+        ident = manifest_data["identity"]
+        if ident is not None:
+            with open(os.path.join(creds, ident["cred"]), "rb") as f:
+                data = f.read()
+            tmp = ident["dest"] + ".tmp"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp, ident["dest"])
+
+        tmp = dst + ".tmp"
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        os.replace(tmp, ident["dest"])
+        with os.fdopen(fd, "w") as f:
+            yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        os.replace(tmp, dst)
+      '';
 
-    tmp = dst + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-    os.replace(tmp, dst)
-  '';
-
-  credentials = map (i: "${i.cred}:${i.file}") numbered
+  credentials =
+    map (i: "${i.cred}:${i.file}") numbered
     ++ optional (cfg.repeater.identityKeyFile != null) "identity-key:${cfg.repeater.identityKeyFile}";
 in
 {
@@ -217,12 +314,24 @@ in
 
     package = mkOption {
       type = types.package;
-      defaultText = literalExpression "pkgs.openhop-repeater";
-      description = "The openhop-repeater package to run.";
+      default = pkgs.callPackage ./package.nix { };
+      defaultText = literalExpression "pkgs.callPackage ./package.nix { }";
+      description = ''
+        The openhop-repeater package to run. The default is built from this repository
+        with your nixpkgs; set it to `pkgs.openhop-repeater` if you use the overlay.
+      '';
     };
 
-    user = mkOption { type = types.str; default = "openhop-repeater"; description = "Service user."; };
-    group = mkOption { type = types.str; default = "openhop-repeater"; description = "Service group."; };
+    user = mkOption {
+      type = types.str;
+      default = "openhop-repeater";
+      description = "Service user.";
+    };
+    group = mkOption {
+      type = types.str;
+      default = "openhop-repeater";
+      description = "Service group.";
+    };
 
     extraGroups = mkOption {
       type = types.listOf types.str;
@@ -237,7 +346,13 @@ in
     openFirewall = mkEnableOption "opening the web dashboard port in the firewall";
 
     logLevel = mkOption {
-      type = types.enum [ "TRACE" "DEBUG" "INFO" "WARNING" "ERROR" ];
+      type = types.enum [
+        "TRACE"
+        "DEBUG"
+        "INFO"
+        "WARNING"
+        "ERROR"
+      ];
       default = "INFO";
       description = "Daemon log level.";
     };
@@ -264,7 +379,11 @@ in
       };
 
       mode = mkOption {
-        type = types.enum [ "forward" "monitor" "no_tx" ];
+        type = types.enum [
+          "forward"
+          "monitor"
+          "no_tx"
+        ];
         default = "forward";
         description = "`forward` repeats packets, `monitor` doesn't repeat, `no_tx` disables all transmit.";
       };
@@ -334,15 +453,35 @@ in
             If unset the daemon generates one.
           '';
         };
-        maxClients = mkOption { type = types.ints.positive; default = 5; description = "Max authenticated clients."; };
-        allowReadOnly = mkOption { type = types.bool; default = false; description = "Allow read-only access without a password."; };
-        jwtExpiryMinutes = mkOption { type = types.ints.positive; default = 60; description = "Web login lifetime."; };
+        maxClients = mkOption {
+          type = types.ints.positive;
+          default = 5;
+          description = "Max authenticated clients.";
+        };
+        allowReadOnly = mkOption {
+          type = types.bool;
+          default = false;
+          description = "Allow read-only access without a password.";
+        };
+        jwtExpiryMinutes = mkOption {
+          type = types.ints.positive;
+          default = 60;
+          description = "Web login lifetime.";
+        };
       };
     };
 
     radio = {
       type = mkOption {
-        type = types.nullOr (types.enum [ "sx1262" "sx1262_ch341" "kiss" "modem_tcp" "modem_usb" ]);
+        type = types.nullOr (
+          types.enum [
+            "sx1262"
+            "sx1262_ch341"
+            "kiss"
+            "modem_tcp"
+            "modem_usb"
+          ]
+        );
         default = null;
         description = ''
           Radio backend. `sx1262` is a Linux SPI/GPIO radio (e.g. Raspberry Pi HAT),
@@ -358,16 +497,42 @@ in
         example = 910525000;
         description = "Frequency in Hz. Required when a radio is configured; use your region's MeshCore frequency.";
       };
-      txPower = mkOption { type = types.int; default = 14; description = "TX power in dBm."; };
-      bandwidth = mkOption { type = types.ints.positive; default = 62500; description = "Bandwidth in Hz."; };
-      spreadingFactor = mkOption { type = types.ints.between 5 12; default = 8; description = "LoRa spreading factor."; };
-      codingRate = mkOption { type = types.ints.between 5 8; default = 8; description = "LoRa coding rate denominator (5-8)."; };
-      preambleLength = mkOption { type = types.ints.positive; default = 32; description = "Preamble length in symbols."; };
+      txPower = mkOption {
+        type = types.int;
+        default = 14;
+        description = "TX power in dBm.";
+      };
+      bandwidth = mkOption {
+        type = types.ints.positive;
+        default = 62500;
+        description = "Bandwidth in Hz.";
+      };
+      spreadingFactor = mkOption {
+        type = types.ints.between 5 12;
+        default = 8;
+        description = "LoRa spreading factor.";
+      };
+      codingRate = mkOption {
+        type = types.ints.between 5 8;
+        default = 8;
+        description = "LoRa coding rate denominator (5-8).";
+      };
+      preambleLength = mkOption {
+        type = types.ints.positive;
+        default = 32;
+        description = "Preamble length in symbols.";
+      };
 
       sx1262 = mkOption {
         type = types.attrsOf types.anything;
         default = { };
-        example = { cs_pin = 21; reset_pin = 18; busy_pin = 20; irq_pin = 16; use_dio3_tcxo = true; };
+        example = {
+          cs_pin = 21;
+          reset_pin = 18;
+          busy_pin = 20;
+          irq_pin = 16;
+          use_dio3_tcxo = true;
+        };
         description = ''
           Overrides for the `sx1262` hardware section (BCM GPIO numbers for `sx1262`,
           CH341 GPIO 0-7 for `sx1262_ch341`). Unset keys use upstream's defaults.
@@ -375,43 +540,77 @@ in
       };
       ch341 = mkOption {
         type = types.attrsOf types.anything;
-        default = { vid = 6790; pid = 21778; };
+        default = {
+          vid = 6790;
+          pid = 21778;
+        };
         description = "`ch341` section (USB vid/pid, optional bus/address/serial_number).";
       };
       kiss = mkOption {
         type = types.attrsOf types.anything;
         default = { };
-        example = { port = "/dev/ttyUSB0"; baud_rate = 9600; };
+        example = {
+          port = "/dev/ttyUSB0";
+          baud_rate = 9600;
+        };
         description = "`kiss` section, used when `radio.type = \"kiss\"`.";
       };
       modemTcp = mkOption {
         type = types.attrsOf types.anything;
         default = { };
-        example = { host = "openhop-modem.local"; port = 5055; };
+        example = {
+          host = "openhop-modem.local";
+          port = 5055;
+        };
         description = "`modem_tcp` section, used when `radio.type = \"modem_tcp\"`.";
       };
       modemUsb = mkOption {
         type = types.attrsOf types.anything;
         default = { };
-        example = { port = "/dev/ttyACM0"; baudrate = 921600; };
+        example = {
+          port = "/dev/ttyACM0";
+          baudrate = 921600;
+        };
         description = "`modem_usb` section, used when `radio.type = \"modem_usb\"`.";
       };
     };
 
     http = {
-      enable = mkOption { type = types.bool; default = true; description = "Enable the web dashboard and API."; };
-      host = mkOption { type = types.str; default = "0.0.0.0"; description = "Listen address."; };
-      port = mkOption { type = types.port; default = 8000; description = "Listen port."; };
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable the web dashboard and API.";
+      };
+      host = mkOption {
+        type = types.str;
+        default = "0.0.0.0";
+        description = "Listen address.";
+      };
+      port = mkOption {
+        type = types.port;
+        default = 8000;
+        description = "Listen port.";
+      };
     };
 
     gps = {
       enable = mkEnableOption "reading a local GPS receiver (also lets the daemon set the system clock)";
-      device = mkOption { type = types.str; default = "/dev/serial0"; description = "Serial device for the GPS module."; };
+      device = mkOption {
+        type = types.str;
+        default = "/dev/serial0";
+        description = "Serial device for the GPS module.";
+      };
     };
 
     mesh = {
       pathHashMode = mkOption {
-        type = types.nullOr (types.enum [ 0 1 2 ]);
+        type = types.nullOr (
+          types.enum [
+            0
+            1
+            2
+          ]
+        );
         default = null;
         description = ''
           Per-hop path hash size: 0 = 1 byte (legacy), 1 = 2 bytes, 2 = 3 bytes.
@@ -419,7 +618,14 @@ in
         '';
       };
       loopDetect = mkOption {
-        type = types.nullOr (types.enum [ "off" "minimal" "moderate" "strict" ]);
+        type = types.nullOr (
+          types.enum [
+            "off"
+            "minimal"
+            "moderate"
+            "strict"
+          ]
+        );
         default = null;
         description = "Flood loop detection mode. Null leaves the upstream default.";
       };
@@ -452,45 +658,53 @@ in
         protocol over TCP so standard clients can connect to `bindAddress:port`
         (one client at a time). The attribute name is the identity's `name`.
       '';
-      type = types.attrsOf (types.submodule ({ name, ... }: {
-        options = {
-          nodeName = mkOption {
-            type = types.strMatching ".{1,31}";
-            default = name;
-            description = "Name the companion presents on the mesh (max 31 characters).";
-          };
-          identityKeyFile = mkOption {
-            type = types.path;
-            example = "/run/secrets/openhop-companion-key";
-            description = ''
-              File holding the identity key as hex: 64 characters (32-byte seed) or 128
-              (MeshCore firmware key). Must differ from every other identity on the node.
-              Generate a new one with `openssl rand -hex 32`.
-            '';
-          };
-          bindAddress = mkOption {
-            type = types.str;
-            default = "127.0.0.1";
-            example = "0.0.0.0";
-            description = ''
-              Address the TCP server binds to. Defaults to localhost because the companion
-              port has no authentication; use `0.0.0.0` only on a trusted network.
-            '';
-          };
-          port = mkOption { type = types.port; default = 5000; description = "TCP port."; };
-          tcpTimeout = mkOption {
-            type = types.nullOr types.ints.unsigned;
-            default = null;
-            description = "Client idle timeout in seconds; 0 disables. Null uses upstream's default (120).";
-          };
-          openFirewall = mkEnableOption "opening this companion's TCP port in the firewall";
-          settings = mkOption {
-            type = types.attrsOf types.anything;
-            default = { };
-            description = "Extra keys for this companion's `settings` block.";
-          };
-        };
-      }));
+      type = types.attrsOf (
+        types.submodule (
+          { name, ... }: {
+            options = {
+              nodeName = mkOption {
+                type = types.strMatching ".{1,31}";
+                default = name;
+                description = "Name the companion presents on the mesh (max 31 characters).";
+              };
+              identityKeyFile = mkOption {
+                type = types.path;
+                example = "/run/secrets/openhop-companion-key";
+                description = ''
+                  File holding the identity key as hex: 64 characters (32-byte seed) or 128
+                  (MeshCore firmware key). Must differ from every other identity on the node.
+                  Generate a new one with `openssl rand -hex 32`.
+                '';
+              };
+              bindAddress = mkOption {
+                type = types.str;
+                default = "127.0.0.1";
+                example = "0.0.0.0";
+                description = ''
+                  Address the TCP server binds to. Defaults to localhost because the companion
+                  port has no authentication; use `0.0.0.0` only on a trusted network.
+                '';
+              };
+              port = mkOption {
+                type = types.port;
+                default = 5000;
+                description = "TCP port.";
+              };
+              tcpTimeout = mkOption {
+                type = types.nullOr types.ints.unsigned;
+                default = null;
+                description = "Client idle timeout in seconds; 0 disables. Null uses upstream's default (120).";
+              };
+              openFirewall = mkEnableOption "opening this companion's TCP port in the firewall";
+              settings = mkOption {
+                type = types.attrsOf types.anything;
+                default = { };
+                description = "Extra keys for this companion's `settings` block.";
+              };
+            };
+          }
+        )
+      );
     };
 
     roomServers = mkOption {
@@ -499,27 +713,59 @@ in
         Room server identities. Each acts as a separate logical node on the mesh.
         The attribute name is the identity's `name`.
       '';
-      type = types.attrsOf (types.submodule ({ name, ... }: {
-        options = {
-          nodeName = mkOption { type = types.str; default = name; description = "Name the room presents on the mesh."; };
-          identityKeyFile = mkOption {
-            type = types.path;
-            example = "/run/secrets/openhop-room-key";
-            description = "File holding the room's identity key as hex (see `companions.<name>.identityKeyFile`).";
-          };
-          latitude = mkOption { type = types.nullOr coordinate; default = null; description = "Room latitude."; };
-          longitude = mkOption { type = types.nullOr coordinate; default = null; description = "Room longitude."; };
-          floodAdvertIntervalHours = mkOption { type = types.nullOr types.ints.unsigned; default = null; description = "Flood advert interval in hours."; };
-          directAdvertIntervalHours = mkOption { type = types.nullOr types.ints.unsigned; default = null; description = "Zero-hop advert interval in hours."; };
-          adminPasswordFile = mkOption { type = types.nullOr types.path; default = null; description = "File with the room's admin password."; };
-          guestPasswordFile = mkOption { type = types.nullOr types.path; default = null; description = "File with the room's guest password."; };
-          settings = mkOption {
-            type = types.attrsOf types.anything;
-            default = { };
-            description = "Extra keys for this room's `settings` block.";
-          };
-        };
-      }));
+      type = types.attrsOf (
+        types.submodule (
+          { name, ... }: {
+            options = {
+              nodeName = mkOption {
+                type = types.str;
+                default = name;
+                description = "Name the room presents on the mesh.";
+              };
+              identityKeyFile = mkOption {
+                type = types.path;
+                example = "/run/secrets/openhop-room-key";
+                description = "File holding the room's identity key as hex (see `companions.<name>.identityKeyFile`).";
+              };
+              latitude = mkOption {
+                type = types.nullOr coordinate;
+                default = null;
+                description = "Room latitude.";
+              };
+              longitude = mkOption {
+                type = types.nullOr coordinate;
+                default = null;
+                description = "Room longitude.";
+              };
+              floodAdvertIntervalHours = mkOption {
+                type = types.nullOr types.ints.unsigned;
+                default = null;
+                description = "Flood advert interval in hours.";
+              };
+              directAdvertIntervalHours = mkOption {
+                type = types.nullOr types.ints.unsigned;
+                default = null;
+                description = "Zero-hop advert interval in hours.";
+              };
+              adminPasswordFile = mkOption {
+                type = types.nullOr types.path;
+                default = null;
+                description = "File with the room's admin password.";
+              };
+              guestPasswordFile = mkOption {
+                type = types.nullOr types.path;
+                default = null;
+                description = "File with the room's guest password.";
+              };
+              settings = mkOption {
+                type = types.attrsOf types.anything;
+                default = { };
+                description = "Extra keys for this room's `settings` block.";
+              };
+            };
+          }
+        )
+      );
     };
 
     chicagolandMesh = {
@@ -542,6 +788,7 @@ in
       type = yaml.type;
       readOnly = true;
       default = finalSettings;
+      defaultText = lib.literalMD "the generated configuration";
       description = ''
         The final config (minus secrets) written to `config.yaml`. Read-only; inspect with
         `nix eval .#nixosConfigurations.<host>.config.services.openhop-repeater.renderedSettings`.
@@ -612,6 +859,32 @@ in
           message = "services.openhop-repeater.radio.frequency must be set when a radio type is configured.";
         }
         {
+          assertion = cfg.radio.type != "modem_usb" || cfg.radio.modemUsb ? port;
+          message = "services.openhop-repeater.radio.modemUsb.port must be set when radio.type is \"modem_usb\".";
+        }
+        {
+          assertion = cfg.radio.type != "kiss" || cfg.radio.kiss ? port;
+          message = "services.openhop-repeater.radio.kiss.port must be set when radio.type is \"kiss\".";
+        }
+        {
+          assertion = cfg.radio.type != "modem_tcp" || cfg.radio.modemTcp ? host;
+          message = "services.openhop-repeater.radio.modemTcp.host must be set when radio.type is \"modem_tcp\".";
+        }
+        {
+          assertion =
+            lib.intersectLists (attrNames cfg.companions) (attrNames cfg.roomServers) == [ ]
+            && !(cfg.companions ? repeater || cfg.roomServers ? repeater);
+          message = "services.openhop-repeater: companion and room server names must be unique across both sets and must not be \"repeater\".";
+        }
+        {
+          assertion =
+            let
+              ports = optional cfg.http.enable cfg.http.port ++ mapAttrsToList (_: c: c.port) cfg.companions;
+            in
+            lib.unique ports == ports;
+          message = "services.openhop-repeater: the HTTP port and companion TCP ports must all be different.";
+        }
+        {
           assertion = cfg.repeater.latitude >= -90 && cfg.repeater.latitude <= 90;
           message = "services.openhop-repeater.repeater.latitude must be between -90 and 90.";
         }
@@ -621,14 +894,21 @@ in
         }
       ];
 
-      warnings = optional (cfg.repeater.security.adminPasswordFile == null && cfg.http.enable)
-        "services.openhop-repeater: no admin password set; web dashboard login will not work. Set repeater.security.adminPasswordFile.";
+      warnings =
+        optional (cfg.repeater.security.adminPasswordFile == null && cfg.http.enable)
+          "services.openhop-repeater: no admin password set; web dashboard login will not work. Set repeater.security.adminPasswordFile.";
 
       users.users.${cfg.user} = {
         isSystemUser = true;
         group = cfg.group;
         home = stateDir;
-        extraGroups = [ "dialout" "plugdev" "gpio" "spi" ] ++ cfg.extraGroups;
+        extraGroups = [
+          "dialout"
+          "plugdev"
+          "gpio"
+          "spi"
+        ]
+        ++ cfg.extraGroups;
       };
       users.groups.${cfg.group} = { };
       users.groups.plugdev = { };
@@ -651,7 +931,10 @@ in
         after = [ "network-online.target" ];
         wants = [ "network-online.target" ];
         # Re-render the config whenever the Nix-declared settings change.
-        restartTriggers = [ storeConfig manifest ];
+        restartTriggers = [
+          storeConfig
+          manifest
+        ];
 
         environment.HOME = stateDir;
 
