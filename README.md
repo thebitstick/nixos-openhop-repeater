@@ -13,7 +13,8 @@ services.openhop-repeater = {
 };
 ```
 
-> Unofficial. This project is not affiliated with or endorsed by openHop. It packages
+> Unofficial, and largely AI-written (see [AI-DISCLOSURE.md](AI-DISCLOSURE.md)). This project is not
+> affiliated with or endorsed by openHop. It packages
 > openhop_repeater **1.1.4** (with openhop_core **1.1.3**) and is tested against nixos-unstable,
 > 26.05 and 25.11.
 
@@ -168,7 +169,10 @@ The checks need a Linux builder but not KVM. They cover the generated config, th
 start-up, and the configuration mistakes the module rejects. They do not start the real daemon or talk to
 hardware.
 
-## License
+## License and AI disclosure
 
-See [LICENSE](LICENSE) for this repository's Nix code. openHop Repeater and openhop_core are MIT licensed
-by their authors.
+This repository's Nix code is licensed under the GNU GPL v3, see [LICENSE.md](LICENSE.md). openHop Repeater and
+openhop_core, which this packages, are MIT licensed by their authors.
+
+This project was written largely by an AI assistant (Claude) working with its author. See
+[AI-DISCLOSURE.md](AI-DISCLOSURE.md) for what that means, and for what has and has not been tested.

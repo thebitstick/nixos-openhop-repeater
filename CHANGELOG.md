@@ -9,3 +9,4 @@
 - `package` now has a default, so the module works without the flake.
 - Assertions for missing radio settings, clashing names and ports, and out-of-range coordinates.
 - Tests (`nix flake check`) and a GitHub Actions workflow.
+- GPL-3.0 license and an AI disclosure.
