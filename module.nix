@@ -1003,6 +1003,8 @@ in
           StateDirectoryMode = "0750";
           WorkingDirectory = stateDir;
 
+          # loading the config creates identity.key when it is missing; let only the repeater do that
+          ExecStartPre = "${pkgs.runtimeShell} -c 'for _ in $(seq 100); do [ -s ${cfg.repeater.identityFile} ] && exit 0; sleep 0.3; done'";
           ExecStart = "${cfg.package}/bin/openhop-plugin-manager --config ${runtimeConfig}";
 
           Restart = "on-failure";
