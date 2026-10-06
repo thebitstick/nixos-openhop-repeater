@@ -101,6 +101,28 @@ file on the target machine, which systemd loads at start (`LoadCredential`), so 
   [agenix](https://github.com/ryantm/agenix) paths work here, for example
   `config.sops.secrets.openhop-admin.path`.
 
+## Moving an existing MeshCore node to openHop
+
+To keep a MeshCore device's identity (its node address) when you move it to openHop Repeater, convert its
+64-byte private key (128 hex characters) into a key file. openHop's own converter takes the key as a command-line
+argument, which other users on the machine can read in the process list. This one does not:
+
+```
+nix run github:thebitstick/nixos-openhop-repeater#convert-key -- -o identity.key
+```
+
+It asks for the key with the input hidden (or use `--stdin` or `--key-file`), writes the file with mode `0600`,
+and prints the **public** key and node hash. Compare those with what your MeshCore app shows before you rely on
+the result. The private key is never printed, and an existing file is never overwritten without `--force`.
+
+- `-o identity.key` writes the repeater's identity in the format openHop reads. Point
+  `repeater.identityKeyFile` at it.
+- `--format hex` writes the plain hex form that companion and room server identities use.
+- `--check` only shows the public key and writes nothing.
+
+Works on macOS and Linux and needs only Python. Afterwards, clear any shell history that contains the key, and
+remove the plaintext key file you converted from.
+
 ## How the configuration is applied
 
 `config.yaml` is regenerated from your Nix options, plus the secrets, **every time the service starts**, and
@@ -139,7 +161,7 @@ radio.preset = "usa-canada-recommended";   # 910.525 MHz / SF7 / BW 62.5 kHz / C
 
 There are presets for Australia, Brazil, Costa Rica, the EU/UK (including 433 MHz), the Czech Republic,
 Hungary, the Netherlands, New Zealand, Portugal, Slovakia, Switzerland, USA/Canada and Vietnam. The option's
-documentation (`nix build .#options-doc`) lists every name with its values. A preset sets the frequency,
+documentation in [docs/options.md](docs/options.md) lists every name with its values. A preset sets the frequency,
 bandwidth, spreading factor and coding rate, and a path hash size where the region defines one.
 
 Settings you add yourself win over the preset, so a region that differs a little is easy to describe. For
@@ -203,33 +225,34 @@ services.openhop-repeater = {
 
 ## All options
 
-`nix build github:thebitstick/nixos-openhop-repeater#options-doc` produces a Markdown reference of every
-option with its type, default and description.
+[docs/options.md](docs/options.md) lists every option with its type, default and description. It is generated
+from the module, and a check keeps it up to date.
 
 ## Updating to a new openHop release
 
 1. In `package.nix`, bump `version` for `openhop-repeater`, and the `openhop-core` version if upstream's
    `pyproject.toml` pins a new one.
 2. Get the new hash: `nix store prefetch-file --unpack https://github.com/openhop-dev/openhop_repeater/archive/refs/tags/<version>.tar.gz`
-3. Refresh the radio presets: `cp "$(nix build .#packages.x86_64-linux.openhop-repeater.src --no-link --print-out-paths)/radio-presets.json" .`
-4. `nix flake check`. The `presets-in-sync` check fails if step 3 was forgotten. A new upstream release can
+3. Run `scripts/update-generated.sh`. It refreshes the radio presets from the new version's source and
+   regenerates `docs/options.md`.
+4. `nix flake check`. The `presets-in-sync` and `docs-in-sync` checks fail if step 3 was forgotten. A new upstream release can
    rename config keys, so read the release notes.
 
 ## Development
 
 ```
-nix flake check        # package, rendered config, radio presets, start-up script and assertion tests
+nix flake check        # package, rendered config, presets, docs, key converter, start-up script, assertions
 nix fmt                # nixfmt
 ```
 
-The checks need a Linux builder but not KVM. They cover the generated config, the secret handling at
-start-up, and the configuration mistakes the module rejects. They do not start the real daemon or talk to
+The checks need a Linux builder but not KVM. They cover the generated config, the radio presets, the secret
+handling at start-up, the key converter (against openhop_core's own key handling), and the configuration
+mistakes the module rejects. They do not start the real daemon or talk to
 hardware.
 
 ## License and AI disclosure
 
-This repository's Nix code is licensed under the GNU GPL v3, see [LICENSE.md](LICENSE.md). openHop Repeater and
-openhop_core, which this packages, are MIT licensed by their authors.
+MIT, see [LICENSE.md](LICENSE.md), the same license as openHop Repeater and openhop_core, which this packages.
 
 This project was written largely by an AI assistant (Claude) working with its author. See
 [AI-DISCLOSURE.md](AI-DISCLOSURE.md) for what that means, and for what has and has not been tested.

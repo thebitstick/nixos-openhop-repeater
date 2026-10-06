@@ -5,6 +5,8 @@
   module,
   nixosSystem,
   package,
+  options-doc,
+  convert-key,
 }:
 
 let
@@ -177,6 +179,28 @@ in
         t ${json "explicit" explicitOnly} 'has("mesh") | not'
         touch $out
       '';
+
+  # The key converter agrees with openhop_core about which node a key is, and writes safe files.
+  convert-key-test =
+    let
+      python = pkgs.python3.withPackages (_: [ package.passthru.openhop-core ]);
+    in
+    pkgs.runCommand "openhop-repeater-convert-key" { nativeBuildInputs = [ python ]; } ''
+      export BIN=${convert-key}/bin/openhop-convert-key
+      # the repeater is an application, so it is not part of the Python environment
+      export PYTHONPATH=${package}/${pkgs.python3.sitePackages}
+      python3 ${./convert-key-test.py}
+      touch $out
+    '';
+
+  # docs/options.md is the reference generated from the module's current options. nixpkgs formats the
+  # generated Markdown differently from release to release, so this is only meaningful with the nixpkgs
+  # locked in flake.lock (as in CI), not with --override-input.
+  docs-in-sync = pkgs.runCommand "openhop-repeater-docs-in-sync" { } ''
+    cmp ${options-doc} ${../docs/options.md} \
+      || { echo "docs/options.md is out of date; run scripts/update-generated.sh"; exit 1; }
+    touch $out
+  '';
 
   # The vendored preset list is still identical to upstream's at the version we package.
   presets-in-sync = pkgs.runCommand "openhop-repeater-presets-in-sync" { } ''

@@ -7,7 +7,8 @@ This project was built with AI assistance.
 Almost all of the code and documentation in this repository was written by **Claude** (Anthropic; Claude
 Sonnet 5.5, run through Claude Code) in a back-and-forth session with the project's author:
 
-- `package.nix`, `module.nix`, the tests in `tests/`, the CI workflow, and the documentation.
+- `package.nix`, `module.nix`, the key converter in `scripts/`, the tests in `tests/`, the CI workflow, and the
+  documentation.
 - Research into upstream openHop Repeater (its `config.yaml.example`, source and documentation), from which
   the module's options were derived. The radio presets are upstream's own data file, not AI-generated.
 - Commits made with Claude's help carry a `Co-Authored-By: Claude` trailer.
@@ -20,7 +21,8 @@ result on their own machines. The module was used to move a live repeater from D
 ## What was tested
 
 - `nix flake check` passes on nixos-unstable, 26.05 and 25.11 (build of the package, the rendered
-  configuration, the start-up script with fake secrets, and rejected configurations).
+  configuration, radio presets, the start-up script with fake secrets, rejected configurations, and the key
+  converter, whose public keys are compared with openhop_core's own derivation for 120 keys).
 - The service was run in a NixOS virtual machine, **without a radio** (`radio.type = null`): it starts, loads
   companions and room servers, and takes its configuration.
 - It runs on one production repeater, **an openHop Modem (Heltec V3) over USB (`radio.type = "modem_usb"`)**.
