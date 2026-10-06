@@ -2,12 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# the output does not depend on the architecture, so build for Linux even on macOS
+# the generated docs and the fetched source do not depend on the architecture
 host=$(nix eval --impure --raw --expr 'builtins.currentSystem')
 linux=${host/-darwin/-linux}
 
 echo "Updating docs/options.md ..."
-doc=$(nix build ".#packages.$linux.options-doc" --no-link --print-out-paths)
+doc=$(nix build ".#packages.$host.options-doc" --no-link --print-out-paths)
 install -m 0644 "$doc" docs/options.md
 
 echo "Updating radio-presets.json ..."

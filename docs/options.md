@@ -618,6 +618,30 @@ true
 
 
 
+## services\.openhop-repeater\.plugins\.enable
+
+
+
+Run the openHop plugin manager, a second service that the dashboard’s Plugins page talks to\.
+Without it the dashboard shows “Plugin manager is unavailable”, even if you never use plugins\.
+With it, a dashboard administrator can install and run plugins (code from wheel files or openHop’s
+catalogue), so turn it off if you do not want that and can live with the dashboard notice\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+
+
 ## services\.openhop-repeater\.radio\.bandwidth
 
 

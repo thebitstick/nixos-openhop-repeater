@@ -31,6 +31,8 @@ scripts/update-generated.sh                     # after changing options or bump
 nix run .#convert-key -- --help
 ```
 
+- The Linux builder may be absent (the author removed it). Evaluation, the docs and the key converter still work
+  on macOS; the other checks need Linux, or CI.
 - On macOS, builds need a Linux builder (`nix.linux-builder.enable = true` in nix-darwin). Use explicit
   systems on a Mac: `.#packages.x86_64-linux.openhop-repeater.src`, not `.#openhop-repeater.src`.
 - **Flakes only see git-tracked files.** `git add` new files before `nix build`, or you get "not tracked by Git".
@@ -99,6 +101,9 @@ nix run .#convert-key -- --help
 - Remote login shells may be Nushell: send scripts as `ssh host bash -s <<'EOF'`. A `2>&1` in a plain `ssh host '...'`
   command is a Nushell error.
 - Use `docker exec -i` when feeding a script on stdin.
+- When running upstream code locally, set `HOME` to a scratch directory: `load_config` generates an identity key in
+  `~/.config/openhop_repeater` when none is configured, and that is how a stray key once landed in the user's home.
+  Unix socket paths on macOS are limited to about 100 characters, so keep test sockets in a short path.
 - macOS has bash 3.2: no empty-array expansion under `set -u`. zsh does not split unquoted variables, and
   `PIPESTATUS` is `pipestatus` there; quote globs such as `--include='*.py'`.
 - Do not read `optionalAttrs` conditions from an option inside the same attribute set that defines it: infinite

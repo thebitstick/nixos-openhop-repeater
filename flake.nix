@@ -18,6 +18,33 @@
       ];
 
       # Pure Python, so it also runs on macOS.
+      optionsDoc =
+        pkgs:
+        let
+          eval = nixpkgs.lib.nixosSystem {
+            inherit (pkgs.stdenv.hostPlatform) system;
+            modules = [ module ];
+          };
+          commonmark =
+            (pkgs.nixosOptionsDoc {
+              options = eval.options.services.openhop-repeater;
+              transformOptions = opt: opt // { declarations = [ ]; };
+            }).optionsCommonMark;
+        in
+        pkgs.runCommand "openhop-repeater-options.md" { } ''
+          {
+            cat ${pkgs.writeText "options-header.md" ''
+              # Module options
+
+              Every `services.openhop-repeater.*` option, with its type, default and description.
+              This file is generated from the module by `scripts/update-generated.sh`. Do not edit it by
+              hand: the `docs-in-sync` check fails if it is out of date.
+
+            ''}
+            cat ${commonmark}
+          } > $out
+        '';
+
       convertKey =
         pkgs:
         pkgs.writers.writePython3Bin "openhop-convert-key" {
@@ -39,34 +66,11 @@
           openhop-repeater = pkgs.callPackage ./package.nix { };
           default = openhop-repeater;
           convert-key = convertKey pkgs;
-          options-doc =
-            let
-              eval = nixpkgs.lib.nixosSystem {
-                inherit (pkgs.stdenv.hostPlatform) system;
-                modules = [ module ];
-              };
-              commonmark =
-                (pkgs.nixosOptionsDoc {
-                  options = eval.options.services.openhop-repeater;
-                  transformOptions = opt: opt // { declarations = [ ]; };
-                }).optionsCommonMark;
-            in
-            pkgs.runCommand "openhop-repeater-options.md" { } ''
-              {
-                cat ${pkgs.writeText "options-header.md" ''
-                  # Module options
-
-                  Every `services.openhop-repeater.*` option, with its type, default and description.
-                  This file is generated from the module by `scripts/update-generated.sh`. Do not edit it by
-                  hand: the `docs-in-sync` check fails if it is out of date.
-
-                ''}
-                cat ${commonmark}
-              } > $out
-            '';
+          options-doc = optionsDoc pkgs;
         }))
         // nixpkgs.lib.genAttrs darwinSystems (system: {
           convert-key = convertKey nixpkgs.legacyPackages.${system};
+          options-doc = optionsDoc nixpkgs.legacyPackages.${system};
         });
 
       apps = nixpkgs.lib.genAttrs (systems ++ darwinSystems) (system: {

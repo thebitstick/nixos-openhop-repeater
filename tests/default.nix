@@ -184,6 +184,35 @@ in
       touch $out
     '';
 
+  plugin-manager =
+    pkgs.runCommand "openhop-repeater-plugin-manager" { nativeBuildInputs = [ pkgs.python3 ]; }
+      ''
+        mkdir state
+        printf 'storage:\n  storage_dir: %s\n' "$PWD/state" > config.yaml
+        ${package}/bin/openhop-plugin-manager --config config.yaml &
+        manager=$!
+        for _ in $(seq 100); do [ -S state/plugin-manager.sock ] && break; sleep 0.2; done
+        [ -S state/plugin-manager.sock ] || { echo "the plugin manager never created its socket"; kill $manager; exit 1; }
+        python3 ${./plugin-manager-test.py} state/plugin-manager.sock
+        kill $manager
+        wait $manager || true
+        touch $out
+      '';
+
+  plugin-manager-unit =
+    assert full.config.systemd.services ? openhop-plugin-manager;
+    assert
+      !(
+        (eval {
+          services.openhop-repeater = {
+            repeater.name = "x";
+            plugins.enable = false;
+          };
+        }).config.systemd.services
+          ? openhop-plugin-manager
+      );
+    pkgs.runCommand "openhop-repeater-plugin-manager-unit" { } "touch $out";
+
   # Only valid with the locked nixpkgs: nixpkgs formats the generated Markdown differently per release
   docs-in-sync = pkgs.runCommand "openhop-repeater-docs-in-sync" { } ''
     cmp ${options-doc} ${../docs/options.md} \

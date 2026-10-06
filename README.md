@@ -101,6 +101,16 @@ file on the target machine, which systemd loads at start (`LoadCredential`), so 
   [agenix](https://github.com/ryantm/agenix) paths work here, for example
   `config.sops.secrets.openhop-admin.path`.
 
+## Plugins
+
+The dashboard's Plugins page talks to a second service, the openHop plugin manager, and shows "Plugin manager is
+unavailable" when it is not running. The module runs it by default (`plugins.enable = true`), as openHop's own
+installer does, which makes the notice go away even if you never use plugins.
+
+Running it lets a dashboard administrator install and run plugins, which is third-party code. If you do not want
+that, set `plugins.enable = false` and accept the notice. Setting `plugins.enabled = false` in `settings` does
+not hide the notice: that only stops the manager from starting.
+
 ## Moving an existing MeshCore node to openHop
 
 To keep a MeshCore device's identity (its node address) when you move it to openHop Repeater, convert its

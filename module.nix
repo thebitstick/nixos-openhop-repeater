@@ -821,6 +821,17 @@ in
       );
     };
 
+    plugins.enable = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Run the openHop plugin manager, a second service that the dashboard's Plugins page talks to.
+        Without it the dashboard shows "Plugin manager is unavailable", even if you never use plugins.
+        With it, a dashboard administrator can install and run plugins (code from wheel files or openHop's
+        catalogue), so turn it off if you do not want that and can live with the dashboard notice.
+      '';
+    };
+
     renderedSettings = mkOption {
       type = yaml.type;
       readOnly = true;
@@ -971,5 +982,45 @@ in
         };
       };
     }
+
+    (mkIf cfg.plugins.enable {
+      systemd.services.openhop-plugin-manager = {
+        description = "openHop Plugin Manager";
+        wantedBy = [ "multi-user.target" ];
+        after = [
+          "network-online.target"
+          "openhop-repeater.service"
+        ];
+        wants = [ "network-online.target" ];
+
+        environment.HOME = stateDir;
+
+        serviceConfig = {
+          Type = "simple";
+          User = cfg.user;
+          Group = cfg.group;
+          StateDirectory = stateName;
+          StateDirectoryMode = "0750";
+          WorkingDirectory = stateDir;
+
+          ExecStart = "${cfg.package}/bin/openhop-plugin-manager --config ${runtimeConfig}";
+
+          Restart = "on-failure";
+          RestartPreventExitStatus = 2;
+          RestartSec = 5;
+          TimeoutStopSec = 15;
+          MemoryHigh = "256M";
+          SyslogIdentifier = "openhop-plugin-manager";
+
+          NoNewPrivileges = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          ProtectKernelModules = true;
+          ProtectControlGroups = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+        };
+      };
+    })
   ]);
 }
