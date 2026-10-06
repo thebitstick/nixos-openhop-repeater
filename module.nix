@@ -22,7 +22,6 @@ let
     filterAttrs
     imap0
     concatLists
-    mkDefault
     attrNames
     ;
 
@@ -37,8 +36,22 @@ let
   # Accept "41.44663" as well as 41.44663; the daemon wants a float.
   coordinate = types.coercedTo types.str builtins.fromJSON types.float;
 
+  radioPresets = import ./presets.nix { inherit lib; };
+  preset = if cfg.radio.preset == null then null else radioPresets.${cfg.radio.preset};
+
+  # An explicit setting wins over the preset, which wins over nothing.
+  fromPreset = name: if preset == null then null else preset.${name};
+  effective = explicit: name: if explicit != null then explicit else fromPreset name;
+  radio = {
+    frequency = effective cfg.radio.frequency "frequency";
+    bandwidth = effective cfg.radio.bandwidth "bandwidth";
+    spreadingFactor = effective cfg.radio.spreadingFactor "spreadingFactor";
+    codingRate = effective cfg.radio.codingRate "codingRate";
+  };
+  pathHashMode = effective cfg.mesh.pathHashMode "pathHashMode";
+
   meshSettings = dropNulls {
-    path_hash_mode = cfg.mesh.pathHashMode;
+    path_hash_mode = pathHashMode;
     loop_detect = cfg.mesh.loopDetect;
     default_region = cfg.mesh.defaultRegion;
   };
@@ -97,11 +110,11 @@ let
 
     radio_type = cfg.radio.type;
     radio = {
-      frequency = cfg.radio.frequency;
+      frequency = radio.frequency;
       tx_power = cfg.radio.txPower;
-      bandwidth = cfg.radio.bandwidth;
-      spreading_factor = cfg.radio.spreadingFactor;
-      coding_rate = cfg.radio.codingRate;
+      bandwidth = radio.bandwidth;
+      spreading_factor = radio.spreadingFactor;
+      coding_rate = radio.codingRate;
       preamble_length = cfg.radio.preambleLength;
     };
 
@@ -124,6 +137,7 @@ let
   // optionalAttrs (cfg.mqtt.iataCode != null) {
     mqtt_brokers = {
       iata_code = cfg.mqtt.iataCode;
+      owner = cfg.mqtt.owner;
       brokers = cfg.mqtt.brokers;
     };
   }
@@ -491,11 +505,27 @@ in
         '';
       };
 
+      preset = mkOption {
+        type = types.nullOr (types.enum (lib.attrNames radioPresets));
+        default = null;
+        example = "eu-uk-narrow";
+        description = ''
+          A named set of regional radio settings (frequency, bandwidth, spreading factor, coding
+          rate, and a path hash size where the region defines one). Any of those you also set
+          yourself, such as `radio.frequency`, replaces the preset's value. `radio.txPower` is
+          not part of a preset. The presets are upstream openHop's list:
+
+        ''
+        + lib.concatMapStringsSep "\n" (
+          name: "- `${name}`: ${radioPresets.${name}.title}, ${radioPresets.${name}.description}"
+        ) (lib.attrNames radioPresets);
+      };
+
       frequency = mkOption {
         type = types.nullOr types.ints.positive;
         default = null;
         example = 910525000;
-        description = "Frequency in Hz. Required when a radio is configured; use your region's MeshCore frequency.";
+        description = "Frequency in Hz. Overrides `radio.preset`. Without a preset you must set this and the three settings below.";
       };
       txPower = mkOption {
         type = types.int;
@@ -503,19 +533,22 @@ in
         description = "TX power in dBm.";
       };
       bandwidth = mkOption {
-        type = types.ints.positive;
-        default = 62500;
-        description = "Bandwidth in Hz.";
+        type = types.nullOr types.ints.positive;
+        default = null;
+        example = 62500;
+        description = "Bandwidth in Hz. Overrides `radio.preset`.";
       };
       spreadingFactor = mkOption {
-        type = types.ints.between 5 12;
-        default = 8;
-        description = "LoRa spreading factor.";
+        type = types.nullOr (types.ints.between 5 12);
+        default = null;
+        example = 7;
+        description = "LoRa spreading factor. Overrides `radio.preset`.";
       };
       codingRate = mkOption {
-        type = types.ints.between 5 8;
-        default = 8;
-        description = "LoRa coding rate denominator (5-8).";
+        type = types.nullOr (types.ints.between 5 8);
+        default = null;
+        example = 5;
+        description = "LoRa coding rate denominator (5-8). Overrides `radio.preset`.";
       };
       preambleLength = mkOption {
         type = types.ints.positive;
@@ -614,7 +647,8 @@ in
         default = null;
         description = ''
           Per-hop path hash size: 0 = 1 byte (legacy), 1 = 2 bytes, 2 = 3 bytes.
-          Must match the rest of your mesh. Null leaves the upstream default.
+          Must match the rest of your mesh. If null, the value from `radio.preset` is used when the
+          preset defines one, otherwise the upstream default applies.
         '';
       };
       loopDetect = mkOption {
@@ -643,11 +677,37 @@ in
         example = "ORD";
         description = "IATA airport code identifying your area. Setting it enables the `mqtt_brokers` section.";
       };
+      owner = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Public key of your companion device, which links the repeater to it on MQTT analyzers.
+          A public key, not a secret.
+        '';
+      };
       brokers = mkOption {
         type = types.listOf (types.attrsOf types.anything);
         default = [ ];
-        example = literalExpression ''[ { preset = "letsmesh"; } { preset = "chimesh"; } ]'';
-        description = "Broker list, in upstream's format. Entries may be `{ preset = \"name\"; }`.";
+        example = literalExpression ''
+          [
+            { preset = "letsmesh"; }
+            {
+              name = "my-broker";
+              enabled = true;
+              host = "mqtt.example.org";
+              port = 8883;
+              transport = "tcp";
+              username = "repeater";
+              tls.enabled = true;
+            }
+          ]
+        '';
+        description = ''
+          Broker list, in upstream's format. An entry can be a bundled network preset such as
+          `{ preset = "letsmesh"; }` (bundled: `chimesh`, `letsmesh`, `meshat-se`, `meshcore-ca`,
+          `meshmapper`, `waev`), or a full broker definition. Do not put a broker password here:
+          it would end up in the Nix store.
+        '';
       };
     };
 
@@ -768,22 +828,6 @@ in
       );
     };
 
-    chicagolandMesh = {
-      enable = mkEnableOption ''
-        the setup from ChicagolandMesh's openHop Repeater guide (chicagolandmesh.org):
-        USA/Canada radio preset (910.525 MHz, 62.5 kHz, SF7, CR5, 22 dBm), 3-byte path
-        hashes, minimal loop detection, a flood advert every 4 h, and MQTT reporting to the
-        LetsMesh and ChiMesh brokers with IATA code `ORD`. Every value is a default that you can override in the options above'';
-      mqtt = mkOption {
-        type = types.bool;
-        default = true;
-        description = ''
-          Include the MQTT observer setup. This publishes the packets your repeater hears
-          to public brokers; turn it off if you don't want that.
-        '';
-      };
-    };
-
     renderedSettings = mkOption {
       type = yaml.type;
       readOnly = true;
@@ -816,47 +860,11 @@ in
   };
 
   config = mkIf cfg.enable (mkMerge [
-    (mkIf cfg.chicagolandMesh.enable {
-      services.openhop-repeater = {
-        radio = {
-          frequency = mkDefault 910525000;
-          bandwidth = mkDefault 62500;
-          spreadingFactor = mkDefault 7;
-          codingRate = mkDefault 5;
-          txPower = mkDefault 22;
-        };
-        mesh.pathHashMode = mkDefault 2;
-        repeater = {
-          mode = mkDefault "forward";
-          sendAdvertIntervalHours = mkDefault 4;
-        };
-        mesh.loopDetect = mkDefault "minimal";
-      };
-    })
-    (mkIf (cfg.chicagolandMesh.enable && cfg.chicagolandMesh.mqtt) {
-      services.openhop-repeater.mqtt = {
-        iataCode = mkDefault "ORD";
-        # Exactly the broker list from ChiMesh's openHop instructions.
-        brokers = mkDefault [
-          { preset = "letsmesh"; }
-          {
-            name = "chimesh";
-            enabled = true;
-            host = "mqtt.chimesh.org";
-            port = 443;
-            transport = "websockets";
-            audience = "mqtt.chimesh.org";
-            use_jwt_auth = true;
-            tls.enabled = true;
-          }
-        ];
-      };
-    })
     {
       assertions = [
         {
-          assertion = cfg.radio.type == null || cfg.radio.frequency != null;
-          message = "services.openhop-repeater.radio.frequency must be set when a radio type is configured.";
+          assertion = cfg.radio.type == null || lib.all (v: v != null) (lib.attrValues radio);
+          message = "services.openhop-repeater.radio: set radio.preset, or set radio.frequency, bandwidth, spreadingFactor and codingRate, when a radio type is configured.";
         }
         {
           assertion = cfg.radio.type != "modem_usb" || cfg.radio.modemUsb ? port;

@@ -46,7 +46,7 @@ Add the flake input and the module to your system:
 
 Without flakes, `imports = [ /path/to/nixos-openhop-repeater/module.nix ];` works too.
 
-Then in `configuration.nix` (see [`examples/`](examples) for a fuller one):
+Then in `configuration.nix` (see [`examples/example-repeater.nix`](examples/example-repeater.nix) for a fuller one):
 
 ```nix
 services.openhop-repeater = {
@@ -62,8 +62,8 @@ services.openhop-repeater = {
 
   radio = {
     type = "modem_usb";         # sx1262 | sx1262_ch341 | kiss | modem_tcp | modem_usb
-    frequency = 910525000;      # Hz, required, no default
     modemUsb.port = "/dev/serial/by-id/usb-...";
+    preset = "eu-uk-narrow";    # your region's radio settings; see "Radio presets" below
   };
 };
 ```
@@ -90,6 +90,13 @@ file on the target machine, which systemd loads at start (`LoadCredential`), so 
 - Every identity needs its own unique key.
 - Your repeater's identity is its address on the mesh. Back up `/var/lib/openhop_repeater/identity.key`
   (or the file you pass as `identityKeyFile`). If you replace it, the mesh sees a new node.
+- **Passwords are stored in plain text.** That comes from openHop itself: it keeps `admin_password` and
+  `guest_password` as plain text in its `config.yaml` and compares them as plain strings, both for the
+  dashboard login and for logins over the mesh. Storing a salted hash instead would need a change in openHop,
+  because the daemon would treat the hash as the password. What this module does about it: the password never
+  enters the Nix store, the file you point to is read by systemd and is only readable by root, and the
+  generated `config.yaml` is `0600` and owned by the service user. Use a long, unique password. The repeater
+  password gives administrative control over the node, so do not reuse one you use elsewhere.
 - To keep secrets encrypted in your repository, [sops-nix](https://github.com/Mic92/sops-nix) or
   [agenix](https://github.com/ryantm/agenix) paths work here, for example
   `config.sops.secrets.openhop-admin.path`.
@@ -121,13 +128,61 @@ The service user is added to `dialout`, `plugdev`, `gpio` and `spi`, and udev ru
 to SPI, GPIO and CH341 devices. The daemon runs as an unprivileged user, never as root. Its only extra
 capability is `CAP_SYS_TIME`, and only if you enable `gps.enable`.
 
-## Regional profile: Chicagoland Mesh
+## Radio presets
 
-`chicagolandMesh.enable = true` applies the settings from ChicagolandMesh's openHop guide: 910.525 MHz,
-62.5 kHz, SF7, CR5, 22 dBm, 3-byte path hashes, minimal loop detection, a 4 h advert interval, and MQTT
-reporting to LetsMesh and ChiMesh with IATA code `ORD`. Every value is a default you can override. MQTT
-publishes what your repeater hears to public brokers, so use `chicagolandMesh.mqtt = false` to opt out.
-Other regions: set `radio.*`, `mesh.*` and `mqtt.*` yourself.
+Every region has its own radio settings. Set `radio.preset` to use one of openHop's, which are the same list its
+setup wizard offers:
+
+```nix
+radio.preset = "usa-canada-recommended";   # 910.525 MHz / SF7 / BW 62.5 kHz / CR5
+```
+
+There are presets for Australia, Brazil, Costa Rica, the EU/UK (including 433 MHz), the Czech Republic,
+Hungary, the Netherlands, New Zealand, Portugal, Slovakia, Switzerland, USA/Canada and Vietnam. The option's
+documentation (`nix build .#options-doc`) lists every name with its values. A preset sets the frequency,
+bandwidth, spreading factor and coding rate, and a path hash size where the region defines one.
+
+Settings you add yourself win over the preset, so a region that differs a little is easy to describe. For
+example, USA/Canada with 3-byte path hashes and a higher transmit power:
+
+```nix
+radio = {
+  preset = "usa-canada-recommended";
+  txPower = 22;           # never part of a preset
+};
+mesh.pathHashMode = 2;    # 0 = 1-byte, 1 = 2-byte, 2 = 3-byte hashes
+```
+
+Not in the list, or want full control? Skip the preset and set `radio.frequency`, `bandwidth`,
+`spreadingFactor` and `codingRate` yourself (all four are required then). Check your local regulations for
+frequency and power. `radio-presets.json` is a copy of upstream's file, see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## MQTT
+
+MQTT reporting is off unless you set `mqtt.iataCode`. It publishes what your repeater hears to the brokers you
+list, so choose them deliberately. Use a bundled network preset, your own broker, or both:
+
+```nix
+mqtt = {
+  iataCode = "AMS";                     # your nearest airport code
+  owner = "<your companion's public key>";   # optional
+  brokers = [
+    { preset = "letsmesh"; }            # bundled: chimesh, letsmesh, meshat-se, meshcore-ca, meshmapper, waev
+    {
+      name = "my-broker";
+      enabled = true;
+      host = "mqtt.example.org";
+      port = 8883;
+      transport = "tcp";
+      tls.enabled = true;
+    }
+  ];
+};
+```
+
+Your network's own guide will say which preset or broker to use. Broker passwords do not belong here, because
+this part of the configuration ends up in the Nix store.
 
 ## Companions and room servers
 
@@ -156,12 +211,14 @@ option with its type, default and description.
 1. In `package.nix`, bump `version` for `openhop-repeater`, and the `openhop-core` version if upstream's
    `pyproject.toml` pins a new one.
 2. Get the new hash: `nix store prefetch-file --unpack https://github.com/openhop-dev/openhop_repeater/archive/refs/tags/<version>.tar.gz`
-3. `nix flake check`. A new upstream release can rename config keys, so read the release notes.
+3. Refresh the radio presets: `cp "$(nix build .#packages.x86_64-linux.openhop-repeater.src --no-link --print-out-paths)/radio-presets.json" .`
+4. `nix flake check`. The `presets-in-sync` check fails if step 3 was forgotten. A new upstream release can
+   rename config keys, so read the release notes.
 
 ## Development
 
 ```
-nix flake check        # package build, rendered config, start-up script and assertion tests
+nix flake check        # package, rendered config, radio presets, start-up script and assertion tests
 nix fmt                # nixfmt
 ```
 

@@ -8,8 +8,8 @@ Almost all of the code and documentation in this repository was written by **Cla
 Sonnet 5.5, run through Claude Code) in a back-and-forth session with the project's author:
 
 - `package.nix`, `module.nix`, the tests in `tests/`, the CI workflow, and the documentation.
-- Research into upstream openHop Repeater (its `config.yaml.example`, source and documentation) and into
-  ChicagolandMesh's recommended settings, from which the module's options and the regional profile were derived.
+- Research into upstream openHop Repeater (its `config.yaml.example`, source and documentation), from which
+  the module's options were derived. The radio presets are upstream's own data file, not AI-generated.
 - Commits made with Claude's help carry a `Co-Authored-By: Claude` trailer.
 
 ## What the human did
