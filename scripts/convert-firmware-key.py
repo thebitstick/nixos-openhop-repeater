@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a MeshCore private key into a key file that openHop Repeater can use.
-
-A MeshCore device's private key is 64 bytes (128 hex characters): a 32-byte scalar followed by a 32-byte
-nonce. openHop Repeater keeps its identity in `identity.key`, which holds those bytes base64 encoded. This
-tool does that conversion, so the repeater gets the same public key (the same node address) as the device.
-
-The key is read from a hidden prompt, from a file or from standard input, never from the command line, where
-other users could see it in the process list. It is never printed. The tool prints the *public* key, so you
-can compare it with what your MeshCore app shows before you rely on the result.
-
-  openhop-convert-key -o identity.key                       # prompts for the key (input hidden)
-  openhop-convert-key --key-file key.txt -o identity.key
-  openhop-convert-key --stdin --check < key.txt             # only show the public key, write nothing
-  openhop-convert-key --format hex -o companion-key         # file for companion / room server identities
-
-Uses only the Python standard library.
-"""
+"""Convert a MeshCore private key into an openHop Repeater key file."""
 
 import argparse
 import base64
@@ -24,7 +8,6 @@ import hashlib
 import os
 import sys
 
-# --- Ed25519 public key derivation (RFC 8032), enough to show which node a key belongs to -------------
 
 P = 2**255 - 19
 D = -121665 * pow(121666, P - 2, P) % P
@@ -77,9 +60,7 @@ def _compress(point):
 def public_key(key):
     """Public key of a 32-byte seed or a 64-byte MeshCore key, as openhop_core derives it."""
     if len(key) == 64:
-        # MeshCore expanded key: the first 32 bytes are the scalar, used without clamping. Like libsodium's
-        # crypto_scalarmult_ed25519_base_noclamp, which openhop_core calls, bit 255 is ignored.
-        # (Keys made by MeshCore are clamped, so that bit is already clear in them.)
+        # libsodium's unclamped base-point multiplication, which openhop_core uses, ignores bit 255
         scalar = int.from_bytes(key[:32], "little") & ((1 << 255) - 1)
     else:
         expanded = bytearray(hashlib.sha512(key).digest()[:32])
@@ -90,7 +71,6 @@ def public_key(key):
     return _compress(_multiply(scalar, BASE))
 
 
-# --- command line ---------------------------------------------------------------------------------------
 
 
 def parse_key(text):

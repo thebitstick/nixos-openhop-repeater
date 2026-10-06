@@ -23,7 +23,7 @@ let
       pycryptodome
       pynacl
       pyyaml
-      # "hardware" extra: SX1262 over SPI/GPIO, CH341 USB-to-SPI, serial modems
+      # openhop_core's "hardware" extra
       python-periphery
       spidev
       pyserial

@@ -86,6 +86,9 @@ nix run .#convert-key -- --help
   interactive password, so give the user the command (use `ssh -t`) rather than trying it.
 - **Be honest about verification.** Say what was tested and what was not; a README command that was never run
   has been wrong before (it failed on macOS). Prefer a test that can fail over a claim.
+- **No comments unless the code is not self-explanatory.** The author finds narrating comments a mark of AI-written
+  code. Comment only a non-obvious *why* (a trap, an upstream quirk), never what the code already says. Option
+  `description`s and the docs are documentation, not comments.
 - **Public repo hygiene:** no personal data (names, coordinates, hostnames, IPs, emails, keys) in tracked files.
   Examples use placeholders. Scan before pushing.
 - **Clean up** scratch files, VMs and containers you create, and say what you touched when asked.

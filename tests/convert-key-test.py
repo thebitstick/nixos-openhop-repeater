@@ -1,5 +1,3 @@
-"""Checks openhop-convert-key against the real openhop_core / repeater code."""
-
 import base64
 import hashlib
 import os
@@ -25,8 +23,7 @@ def vector(n):
     return hashlib.sha512(f"openhop-convert-key-{n}".encode()).digest()
 
 
-# 1. The public key matches the one openhop_core derives, for firmware keys (64 bytes: random scalars,
-#    so also ones with the top bit set) and for 32-byte seeds.
+# random 64-byte keys include scalars with the top bit set
 for n in range(60):
     for key in (vector(n), vector(n)[:32]):
         want = LocalIdentity(seed=key).get_public_key().hex()
@@ -36,7 +33,6 @@ for n in range(60):
         assert key.hex() not in out, "the private key must never be printed"
 print("public keys match openhop_core for 120 keys")
 
-# 2. identity format: what the repeater's own loader reads back is exactly the key we started with
 key = vector(1000)
 with tempfile.TemporaryDirectory() as tmp:
     path = os.path.join(tmp, "identity.key")
@@ -46,20 +42,17 @@ with tempfile.TemporaryDirectory() as tmp:
     assert _load_or_create_identity_key(path=path) == key, "the repeater reads back a different key"
     assert LocalIdentity(seed=_load_or_create_identity_key(path=path)).get_public_key().hex() in out
 
-    # refuses to overwrite unless forced
     run(["--stdin", "-o", path], vector(1001).hex(), ok=False)
     assert _load_or_create_identity_key(path=path) == key, "an existing file was overwritten"
     run(["--stdin", "-o", path, "--force"], vector(1001).hex())
     assert _load_or_create_identity_key(path=path) == vector(1001)
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 
-    # hex format, for companion and room server key files
     hexpath = os.path.join(tmp, "companion-key")
     run(["--stdin", "--format", "hex", "-o", hexpath], key.hex())
     assert open(hexpath).read().strip() == key.hex()
     assert stat.S_IMODE(os.stat(hexpath).st_mode) == 0o600
 
-    # key from a file, with a 0x prefix and surrounding whitespace
     keyfile = os.path.join(tmp, "key.txt")
     with open(keyfile, "w") as handle:
         handle.write("  0x" + key.hex().upper() + "\n")
@@ -67,12 +60,11 @@ with tempfile.TemporaryDirectory() as tmp:
     assert not os.path.exists(os.path.join(tmp, "identity.key.tmp")), "temporary file left behind"
 print("identity and hex files are written correctly, with mode 0600, and never overwrite by accident")
 
-# 3. bad input is rejected with a clear error, and nothing is written
 with tempfile.TemporaryDirectory() as tmp:
     target = os.path.join(tmp, "out")
     for bad in ("", "xyz", "ab" * 31, "ab" * 33, "ab" * 65, "00" * 64, "gg" * 64):
         result = run(["--stdin", "-o", target], bad, ok=False)
         assert "error:" in result.stderr, f"no clear error for {bad[:8]!r}"
         assert not os.path.exists(target)
-    run(["--stdin"], "ab" * 64, ok=False)  # neither -o nor --check
+    run(["--stdin"], "ab" * 64, ok=False)
 print("bad input is rejected")

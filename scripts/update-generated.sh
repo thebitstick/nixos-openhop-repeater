@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
-# Refreshes the files in this repository that are generated or copied from elsewhere:
-#   docs/options.md     the option reference, generated from module.nix
-#   radio-presets.json  upstream's preset list, at the version package.nix pins
-# Run it after changing options or bumping the openHop version. Needs Nix and, on macOS, a Linux builder.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Evaluate and build for Linux whatever the host is; the output does not depend on the architecture.
+# the output does not depend on the architecture, so build for Linux even on macOS
 host=$(nix eval --impure --raw --expr 'builtins.currentSystem')
 linux=${host/-darwin/-linux}
 

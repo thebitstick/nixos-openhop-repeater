@@ -28,18 +28,15 @@ let
   cfg = config.services.openhop-repeater;
   yaml = pkgs.formats.yaml { };
 
-  # Directory name below /var/lib; matches the paths upstream uses by default.
   stateName = "openhop_repeater";
   stateDir = "/var/lib/${stateName}";
   runtimeConfig = "${stateDir}/config.yaml";
 
-  # Accept "41.44663" as well as 41.44663; the daemon wants a float.
   coordinate = types.coercedTo types.str builtins.fromJSON types.float;
 
   radioPresets = import ./presets.nix { inherit lib; };
   preset = if cfg.radio.preset == null then null else radioPresets.${cfg.radio.preset};
 
-  # An explicit setting wins over the preset, which wins over nothing.
   fromPreset = name: if preset == null then null else preset.${name};
   effective = explicit: name: if explicit != null then explicit else fromPreset name;
   radio = {
@@ -56,7 +53,6 @@ let
     default_region = cfg.mesh.defaultRegion;
   };
 
-  # Secrets are left out of these entries; see `injections` below.
   companionEntries = mapAttrsToList (name: c: {
     inherit name;
     settings = dropNulls (
@@ -178,12 +174,10 @@ let
   // optionalAttrs (cfg.radio.type == "modem_tcp") { modem_tcp = cfg.radio.modemTcp; }
   // optionalAttrs (cfg.radio.type == "modem_usb") { modem_usb = cfg.radio.modemUsb; };
 
-  # `settings` is applied last so anything upstream supports can be set from Nix.
   finalSettings = dropNulls (recursiveUpdate generated cfg.settings);
   storeConfig = yaml.generate "openhop-repeater-config.yaml" finalSettings;
 
-  # Every secret to merge into the config at start. `entry` is null for the
-  # repeater's own security block, otherwise the identity it belongs to.
+  # `entry` is null for the repeater's own security block
   injections = lib.filter (i: i.file != null) (
     [
       {
@@ -261,8 +255,7 @@ let
     }
   );
 
-  # Merges secrets (never placed in the Nix store) into the config and writes it
-  # to the state directory, where the daemon expects a writable config file.
+  # Secrets must not enter the Nix store, so they are merged into the config when the service starts
   prepareConfig =
     pkgs.writers.writePython3 "openhop-repeater-prepare-config"
       {
@@ -938,7 +931,6 @@ in
         wantedBy = [ "multi-user.target" ];
         after = [ "network-online.target" ];
         wants = [ "network-online.target" ];
-        # Re-render the config whenever the Nix-declared settings change.
         restartTriggers = [
           storeConfig
           manifest

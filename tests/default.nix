@@ -1,4 +1,3 @@
-# Checks run by `nix flake check`. None of them need KVM, so they work in plain CI.
 {
   pkgs,
   lib ? pkgs.lib,
@@ -31,7 +30,6 @@ let
       ];
     };
 
-  # A configuration using most features.
   full = eval {
     services.openhop-repeater = {
       mesh = {
@@ -118,7 +116,6 @@ let
   };
   failing = cfg: map (a: a.message) (lib.filter (a: !a.assertion) cfg.config.assertions);
 
-  # Passes only if the configuration trips an assertion containing `needle`.
   rejects =
     name: needle: extra:
     let
@@ -138,7 +135,6 @@ in
 {
   inherit package;
 
-  # The rendered config has the values we expect.
   rendered-config =
     pkgs.runCommand "openhop-repeater-rendered-config"
       {
@@ -158,58 +154,49 @@ in
         t '.identities.companions[0].name == "Comp 🐧" and .identities.companions[0].settings.tcp_port == 5050'
         t '.identities.room_servers[0].type == "room_server"'
         t 'has("sx1262") | not'
-        # secrets must never be rendered into the (world-readable) store
         ! grep -qiE 'identity_key|admin_password|jwt_secret' $j
         touch $out
       '';
 
-  # Presets expand to the right values, and your own settings win over them.
   radio-presets =
     pkgs.runCommand "openhop-repeater-radio-presets" { nativeBuildInputs = [ pkgs.jq ]; }
       ''
         t() { jq -e "$2" $1 >/dev/null || { echo "FAILED: $2"; jq . $1; exit 1; }; }
-        # preset only; Hungary's preset also sets 2-byte path hashes (mode 1)
+        # Hungary's preset also sets 2-byte path hashes (mode 1)
         t ${json "preset" presetOnly} '.radio.frequency == 869618000 and .radio.bandwidth == 62500 and .radio.spreading_factor == 7 and .radio.coding_rate == 5'
         t ${json "preset" presetOnly} '.mesh.path_hash_mode == 1'
-        # explicit settings replace the preset's, the rest is kept; an explicit hash mode wins
         t ${json "override" presetOverridden} '.radio.frequency == 869000000 and .radio.coding_rate == 8 and .radio.spreading_factor == 7'
         t ${json "override" presetOverridden} '.mesh.path_hash_mode == 2'
-        # no preset at all: explicit values are used and no hash mode is invented
         t ${json "explicit" explicitOnly} '.radio.frequency == 433650000 and .radio.bandwidth == 125000 and .radio.spreading_factor == 9 and .radio.coding_rate == 6'
         t ${json "explicit" explicitOnly} 'has("mesh") | not'
         touch $out
       '';
 
-  # The key converter agrees with openhop_core about which node a key is, and writes safe files.
   convert-key-test =
     let
       python = pkgs.python3.withPackages (_: [ package.passthru.openhop-core ]);
     in
     pkgs.runCommand "openhop-repeater-convert-key" { nativeBuildInputs = [ python ]; } ''
       export BIN=${convert-key}/bin/openhop-convert-key
-      # the repeater is an application, so it is not part of the Python environment
+      # the repeater is an application, so it is not in the Python environment
       export PYTHONPATH=${package}/${pkgs.python3.sitePackages}
       python3 ${./convert-key-test.py}
       touch $out
     '';
 
-  # docs/options.md is the reference generated from the module's current options. nixpkgs formats the
-  # generated Markdown differently from release to release, so this is only meaningful with the nixpkgs
-  # locked in flake.lock (as in CI), not with --override-input.
+  # Only valid with the locked nixpkgs: nixpkgs formats the generated Markdown differently per release
   docs-in-sync = pkgs.runCommand "openhop-repeater-docs-in-sync" { } ''
     cmp ${options-doc} ${../docs/options.md} \
       || { echo "docs/options.md is out of date; run scripts/update-generated.sh"; exit 1; }
     touch $out
   '';
 
-  # The vendored preset list is still identical to upstream's at the version we package.
   presets-in-sync = pkgs.runCommand "openhop-repeater-presets-in-sync" { } ''
     cmp ${package.src}/radio-presets.json ${../radio-presets.json} \
       || { echo "radio-presets.json differs from upstream; see 'Updating' in the README"; exit 1; }
     touch $out
   '';
 
-  # Runs the real start-up script with fake secrets and checks what it writes.
   prepare-script =
     pkgs.runCommand "openhop-repeater-prepare-script"
       {
@@ -234,7 +221,6 @@ in
         grep -q 'admin_password' $out/config.yaml
       '';
 
-  # Mistakes are reported clearly instead of producing a broken service.
   rejects-incomplete-radio = rejects "radio" "set radio.preset, or set radio.frequency" {
     services.openhop-repeater = {
       repeater.name = "x";
